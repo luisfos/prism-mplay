@@ -1,0 +1,9 @@
+{
+	"folders": 
+		{
+			"path": "."
+		},
+	"python.analysis.extraPaths": [
+		"C:/Program Files/Prism2/Scripts",
+	]
+}

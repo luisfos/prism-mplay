@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mainMenu>
+    <menuBar>
+        <subMenu name="Prism">
+            <label>Prism</label>
+            <scriptItem id="quicksave">
+                <actionId>Quicksave</actionId>
+                <label>Quicksave</label>
+                <scriptCode scriptType="python"><![CDATA[import quicksave; quicksave.run(kwargs)]]></scriptCode>
+            </scriptItem>
+            <scriptItem id="save">
+                <actionId>Save...</actionId>
+                <label>Save...</label>
+                <scriptCode scriptType="python"><![CDATA[import save; save.run(kwargs)]]></scriptCode>
+            </scriptItem>
+            <scriptItem id="debug">
+                <label>Debug</label>
+                <scriptCode><![CDATA[from importlib import reload; import mplay_entry; reload(mplay_entry); mplay_entry.debug(kwargs)]]></scriptCode>
+            </scriptItem>
+        </subMenu>
+    </menuBar>
+</mainMenu>

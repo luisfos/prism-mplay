@@ -1,0 +1,9 @@
+{
+    "python.analysis.extraPaths": [
+        "C:/Program Files/Prism2/Scripts",        
+    ],
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "C:/Program Files/Prism2/Scripts"
+    },
+    "python.envFile": "${workspaceFolder}/.env",    
+}

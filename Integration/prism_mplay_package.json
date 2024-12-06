@@ -1,0 +1,15 @@
+{    
+    "env": [
+        {
+            "PRISM_MPLAY": "C:/Users/luisf/Documents/Prism2/plugins/MPlay/Integration"
+        },
+        {
+            "PYTHONPATH" : { 
+                "value": "$PRISM_MPLAY/python3.11libs;$PYTHONPATH",
+                "method": "append"
+            }
+        }          
+    ],    
+    "path" : "$PRISM_MPLAY",
+    "load_package_once": true
+}
