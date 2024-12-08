@@ -7,6 +7,7 @@ import sys
 import os
 import logging
 import time
+import logic
 from pprint import pprint, pformat
 
 LOG = logging.getLogger(__name__)
@@ -47,9 +48,7 @@ def quicksave(kwargs=None) -> None:
     # load settings
     import interface
     settings = interface.DEFAULT_SETTINGS
-    # settings = json.loads(settings)    
-    dialog = interface.SaveDialog(settings, pcore)
-    dialog.exec_()
+    # settings = json.loads(settings)        
     # modify settings    
     # save settings
     # run exporter
@@ -57,8 +56,17 @@ def quicksave(kwargs=None) -> None:
 
 def save(kwargs=None):
     # connect to Prism
+    setup_imports() # setting up imports is faster than relying on PrismInit
+    import PrismInit    
+    pcore = PrismInit.prismInit()
+
     # load settings
+    import interface
+    settings = interface.DEFAULT_SETTINGS
+    # settings = json.loads(settings)    
     # show dialog
+    dialog = interface.SaveDialog(settings, pcore) 
+    dialog.exec_() # modifies settings
     # save settings
     # run exporter
     pass
@@ -70,11 +78,39 @@ def debug(kwargs=None):
     
     setup_imports() # setting up imports is faster than relying on PrismInit
     import PrismInit    
-    pcore = PrismInit.prismInit()
-    print(pcore)
+    pcore = PrismInit.prismInit()    
 
     end_time = time.time()
     LOG.debug(f"End of debug, duration: {end_time - start_time:.3f} seconds")
+
+    import interface
+    settings = interface.DEFAULT_SETTINGS
+
+    brain = logic.Logic()
+    dialog = interface.SaveDialog(settings, pcore, brain)
+    result = dialog.exec_()
+
+    if result:
+        # The dialog was accepted, get the modified settings
+        modified_settings = dialog.get_settings()
+        print("Dialog accepted")
+        print(modified_settings)
+
+        # from logic import Exporter, Logic
+        exporter = logic.Exporter(modified_settings, brain, dryrun=False)
+
+        test_job = logic.Job(
+            location="$HIP/flipbook/",
+            identifier="my_identifier",
+            frames=[],
+            version=1,
+            format=".jpg",
+        )
+        exporter.queue.append(test_job)
+
+        result = exporter.execute()
+        print("result of execute", result)
+
 
 
 if __name__ == "__main__":

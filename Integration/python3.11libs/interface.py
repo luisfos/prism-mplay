@@ -4,12 +4,13 @@ from pprint import pprint, pformat
 import json
 import logging
 
+
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
 '''Import qtpy modules dynamically'''
 try:        
-    from qtpy.QtCore import QObject, QEvent
+    from qtpy.QtCore import QObject, QEvent, Qt
     from qtpy.QtGui import QIcon, QPixmap
     from qtpy.QtWidgets import (
         QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar,
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     # Attempt to import qtpy modules
     '''Import qtpy modules dynamically'''
     try:        
-        from qtpy.QtCore import QObject, QEvent
+        from qtpy.QtCore import QObject, QEvent, Qt
         from qtpy.QtGui import QIcon, QPixmap
         from qtpy.QtWidgets import (
             QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar,
@@ -51,80 +52,41 @@ if __name__ == "__main__":
 
 
 # Default settings stored as a JSON string
-DEFAULT_SETTINGS = '''
-{
+DEFAULT_SETTINGS = {
     "identifier": "my_identifier",
     "frame_range_start": "$FSTART",
     "frame_range_end": "$FEND",
     "comment": "my comment",
-    "autoversion": false,
+    "autoversion": True,
     "version": 1,
     "output_path": "",
     "resolution": "1920x1080",
-    "format": "avif"
+    "format": ".jpg"
 }
-'''
 
-def load_settings():
-    settings = json.loads(DEFAULT_SETTINGS)
-    return settings
+# def load_settings():
+#     settings = json.loads(DEFAULT_SETTINGS)
+#     return settings
 
-def save_settings(settings):
-    """
-    Save the given settings as a JSON string with indentation and update the global DEFAULT_SETTINGS.
+# def save_settings(settings):
+#     """
+#     Save the given settings as a JSON string with indentation and update the global DEFAULT_SETTINGS.
 
-    Args:
-        settings (dict): A dictionary containing the settings to be saved.
+#     Args:
+#         settings (dict): A dictionary containing the settings to be saved.
 
-    Returns:
-        None
-    """
-    global DEFAULT_SETTINGS
-    DEFAULT_SETTINGS = json.dumps(settings, indent=4)
-
-
-class ProgressDialog(QDialog):
-    def __init__(self, parent=None):
-        super(ProgressDialog, self).__init__(parent)
-        self.setWindowTitle("Export Progress")
-        self.setModal(True)
-        
-        layout = QVBoxLayout(self)
-        
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setRange(0, 100)
-        layout.addWidget(self.progress_bar)
-        
-        self.cancel_button = QPushButton("Cancel", self)
-        layout.addWidget(self.cancel_button)
-        
-        self.ok_button = QPushButton("Ok", self)
-        self.ok_button.setEnabled(False)
-        layout.addWidget(self.ok_button)
-        
-        self.cancel_button.clicked.connect(self.on_cancel)
-        self.ok_button.clicked.connect(self.on_ok)
-        
-        self.canceled = False
-
-    def on_cancel(self):
-        self.canceled = True
-        self.reject()
-
-    def on_ok(self):
-        self.accept()
-
-    def set_progress(self, value):
-        self.progress_bar.setValue(value)
-        if value >= 100:
-            self.ok_button.setEnabled(True)
-            self.cancel_button.setEnabled(False)
+#     Returns:
+#         None
+#     """
+#     global DEFAULT_SETTINGS
+#     DEFAULT_SETTINGS = json.dumps(settings, indent=4)
 
 
 class SaveDialog(QDialog):    
-    def __init__(self, settings, pcore, parent=None):
+    def __init__(self, settings, pcore, logic, parent=None):
         super(SaveDialog, self).__init__(parent)
         self.settings = settings
+        self.logic = logic
         self.initUI()
         self.core = pcore
         # self.plugin = pcore.get_plugin("Save")
@@ -159,16 +121,41 @@ class SaveDialog(QDialog):
         change_identifier_button.clicked.connect(change_identifier)
         self.identifier_preview.setText(expand_identifier(self.identifier)) # init
 
-
-        # Frame Range
+        
         frame_range_label = QLabel("Frame Range:")
+        frame_range_layout = QHBoxLayout()
+        frame_range_layout.addWidget(frame_range_label)
+        
+        self.frame_range_combo = QComboBox()
+        self.frame_range_combo.addItems(["Full Range", "Custom", "Single Frame"])
+        self.frame_range_combo.setCurrentText("Full Range")
+        frame_range_layout.addWidget(self.frame_range_combo)
+
+        frame_range_preview_layout = QHBoxLayout()        
         self.frame_range_start = QLineEdit(self.settings['frame_range_start'])
         self.frame_range_end = QLineEdit(self.settings['frame_range_end'])
-        frame_range_layout = QHBoxLayout()
-        frame_range_layout.addWidget(self.frame_range_start)
-        frame_range_layout.addWidget(self.frame_range_end)
-        layout.addWidget(frame_range_label)
+        # Add a spacer item to ensure the layout takes up space even when widgets are hidden
+        frame_range_preview_layout.addStretch() # like adding empty label in houdini
+        frame_range_preview_layout.addWidget(self.frame_range_start)
+        frame_range_preview_layout.addWidget(self.frame_range_end)        
+
         layout.addLayout(frame_range_layout)
+        layout.addLayout(frame_range_preview_layout)
+
+        def update_frame_range_inputs():
+            mode = self.frame_range_combo.currentText()
+            if mode == "Full Range":
+                self.frame_range_start.setHidden(True)
+                self.frame_range_end.setHidden(True)
+            elif mode == "Custom":
+                self.frame_range_start.setHidden(False)
+                self.frame_range_end.setHidden(False)
+            elif mode == "Single Frame":
+                self.frame_range_start.setHidden(False)
+                self.frame_range_end.setHidden(True)
+
+        self.frame_range_combo.currentTextChanged.connect(update_frame_range_inputs)
+        update_frame_range_inputs()  # Initialize the state
 
         comment_label = QLabel("Comment:")
         self.comment_text = QTextEdit(self.settings['comment'])        
@@ -178,23 +165,40 @@ class SaveDialog(QDialog):
 
         self.autoversion_checkbox = QCheckBox("Auto Version")
         self.autoversion_checkbox.setChecked(self.settings['autoversion'])
-        layout.addWidget(self.autoversion_checkbox)
-
+        
         version_label = QLabel("Version:")
         self.version_spinbox = QSpinBox()
         self.version_spinbox.setValue(self.settings['version'])
-        layout.addWidget(version_label)
-        layout.addWidget(self.version_spinbox)
+        
+        autoversion_layout = QHBoxLayout()
+        autoversion_layout.addWidget(self.autoversion_checkbox)
+        autoversion_layout.addWidget(version_label)
+        autoversion_layout.addWidget(self.version_spinbox)
+        
+        layout.addLayout(autoversion_layout)
 
-        output_path_label = QLabel("Output Path:")
-        self.output_path_text = QLineEdit(self.settings['output_path'])
+        def update_version_input():
+            self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked())
+
+        self.autoversion_checkbox.stateChanged.connect(update_version_input)
+        update_version_input()  # Initialize the state
+
+        output_path_label = QLabel("Preview Path:")
+        self.output_path_text = QLabel("test output path")
+        self.output_path_text.setAlignment(Qt.AlignCenter)
         layout.addWidget(output_path_label)
         layout.addWidget(self.output_path_text)
 
         resolution_label = QLabel("Resolution:")
-        self.resolution_text = QLineEdit(self.settings['resolution'])
-        layout.addWidget(resolution_label)
-        layout.addWidget(self.resolution_text)
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems(["as is", "stretch"])
+        self.resolution_combo.setCurrentText(self.settings['resolution'])
+        
+        resolution_layout = QHBoxLayout()
+        resolution_layout.addWidget(resolution_label)
+        resolution_layout.addWidget(self.resolution_combo)
+        
+        layout.addLayout(resolution_layout)
 
         format_label = QLabel("Format:")
         self.format_combo = QComboBox()
@@ -208,23 +212,76 @@ class SaveDialog(QDialog):
 
         export_video_button.clicked.connect(self.on_exit)
 
-    def on_exit(self):
+    def on_exit(self):       
         new_settings = {
-            'identifier': self.identifier.text(),
+            'identifier': self.identifier,
             'frame_range_start': self.frame_range_start.text(),
             'frame_range_end': self.frame_range_end.text(),
             'comment': self.comment_text.toPlainText(),
             'autoversion': self.autoversion_checkbox.isChecked(),
             'version': self.version_spinbox.value(),
             'output_path': self.output_path_text.text(),
-            'resolution': self.resolution_text.text(),
+            'resolution': self.resolution_combo.currentText(),
             'format': self.format_combo.currentText()
-        }        
+        }
+        
         self.settings = new_settings
         self.accept()
         
     def get_settings(self):
         return self.settings
+
+
+class ProgressDialog(QDialog):
+    def __init__(self, exporter, parent=None):
+        super(ProgressDialog, self).__init__(parent)
+        self.setWindowTitle("Export Progress")
+        self.setModal(True)
+        self.exporter = exporter
+
+        layout = QVBoxLayout(self)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, len(self.exporter.queue))
+        layout.addWidget(self.progress_bar)
+
+        self.job_label = QLabel(self)
+        layout.addWidget(self.job_label)
+
+        self.cancel_button = QPushButton("Cancel", self)
+        layout.addWidget(self.cancel_button)
+
+        self.ok_button = QPushButton("Ok", self)
+        self.ok_button.setEnabled(False)
+        layout.addWidget(self.ok_button)
+
+        self.cancel_button.clicked.connect(self.on_cancel)
+        self.ok_button.clicked.connect(self.on_ok)
+
+        self.canceled = False
+
+    def on_cancel(self):
+        self.canceled = True
+        self.reject()
+
+    def on_ok(self):
+        self.accept()
+
+    def set_progress(self, value, job_description):
+        self.progress_bar.setValue(value)
+        self.job_label.setText(f"Job {value} of {self.progress_bar.maximum()}: {job_description}")
+        if value >= self.progress_bar.maximum():
+            self.ok_button.setEnabled(True)
+            self.cancel_button.setEnabled(False)
+
+    def run_exporter(self):
+        for i, job in enumerate(self.exporter.queue):
+            if self.canceled:
+                break
+            job_description = f"Exporting {job.identifier}"
+            self.set_progress(i + 1, job_description)
+            self.exporter.execute()
+            QApplication.processEvents()
 
 
 if __name__ == "__main__":
@@ -236,8 +293,11 @@ if __name__ == "__main__":
     elif app is None:
         app = QApplication([])
 
-    settings = load_settings()
-    dialog = SaveDialog(settings, pcore)        
+    settings = DEFAULT_SETTINGS
+
+    from logic import Exporter, Logic
+    brains = Logic()
+    dialog = SaveDialog(settings, pcore, logic=brains)
 
     result = dialog.exec_()
     if result == QDialog.Accepted:
@@ -245,6 +305,15 @@ if __name__ == "__main__":
         modified_settings = dialog.get_settings()
         print("Dialog accepted")
         print(modified_settings)
-        # Save the modified settings or run the exporter
+
+        exporter = Exporter(settings, brains, dryrun=True)
+
+        progress_dialog = ProgressDialog(exporter)
+        progress_dialog.show()
+        progress_dialog.run_exporter()
+        QApplication.processEvents()
+
+        progress_dialog.set_progress(len(exporter.queue), "All jobs completed")
+        progress_dialog.accept()
     else:
         print("Dialog rejected or closed without saving")
