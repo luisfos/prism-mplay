@@ -222,7 +222,7 @@ class SaveDialog(QDialog):
             'version': self.version_spinbox.value(),
             'output_path': self.output_path_text.text(),
             'resolution': self.resolution_combo.currentText(),
-            'format': self.format_combo.currentText()
+            'image_format': self.format_combo.currentText()
         }
         
         self.settings = new_settings

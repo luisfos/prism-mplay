@@ -83,6 +83,10 @@ def debug(kwargs=None):
     end_time = time.time()
     LOG.debug(f"End of debug, duration: {end_time - start_time:.3f} seconds")
 
+    import hou
+    print(hou.hipFile.path())
+    return
+
     import interface
     settings = interface.DEFAULT_SETTINGS
 
@@ -99,15 +103,28 @@ def debug(kwargs=None):
         # from logic import Exporter, Logic
         exporter = logic.Exporter(modified_settings, brain, dryrun=False)
 
-        test_job = logic.Job(
-            location="$HIP/flipbook/",
-            identifier="my_identifier",
-            frames=[],
-            version=1,
-            format=".jpg",
-        )
-        exporter.queue.append(test_job)
+        # temp remove elements from dictionary
+        del modified_settings["location"]
+        del modified_settings["version"]
+        del modified_settings["format"]
+        del modified_settings["resolution"]
 
+        # create out test outputpath, relying on defaults while waiting on prism funcs
+        outpath = logic.Logic.construct_outputpath(
+            location=modified_settings.get("location", "$HIP/flipbook/"),
+            identifier=modified_settings.get("identifier", "my_identifier"),
+            version=modified_settings.get("version", 1),
+            format=modified_settings.get("format", ".jpg"),
+        )
+
+        test_job = logic.Job(
+            outputpath=outpath,
+            frames=[],      
+            type="hscript",    
+        )
+
+        
+        exporter.queue.append(test_job)
         result = exporter.execute()
         print("result of execute", result)
 
