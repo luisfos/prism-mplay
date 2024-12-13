@@ -33,6 +33,41 @@ class Logic:
         return value        
     
     @staticmethod
+    def context_to_label(pcore, context, status=False):
+        '''
+        Helper function for onRefreshContext
+        Formats the current context as a string for a label
+        '''
+        if not context:
+            return ""
+        
+        # entity is either shot or asset
+        entityType = context.get("type", "")
+        entityName = ""
+        if entityType == "asset":
+            entityName = context.get("asset_path").replace("\\", "/")
+        elif entityType == "shot":
+            entityName = pcore.entities.getShotName(context)
+
+        text = "%s - %s" % (entityType.capitalize(), entityName)
+        
+        if status:
+            defined = False
+            if entityType == "asset":
+                if pcore.entities.getAsset(entityName):
+                    defined = True
+            elif entityType == "shot":
+                # if pcore.entities.getSequences()
+                seq = context.get("sequence")
+                proj_shots = pcore.entities.getShotsFromSequence(seq)
+                proj_shots = [entry['shot'] for entry in proj_shots]
+                if context["shot"] in proj_shots:
+                    defined = True
+            if not defined:
+                text += " (undefined)"
+        return text
+
+    @staticmethod
     def get_entity_path(pcore, filepath=None, context=None) -> Path:
         '''
         Get the entity path from a file path or context
@@ -338,17 +373,13 @@ if __name__ == "__main__":
 
     # logic = Logic()
     # logic.get_prism_context(None)
-    
-    
-    # location = logic.get_entity_path(pcore, filepath=tmp_hip)
-
-    # exporter = Exporter(settings, logic, dryrun=True)
-    # # exporter.add_current_sequence(convert_video=False)
-    
+        
     # hipPath = hou.hipFile.path()
     tmp_hip =r"e:\Projects\TOPHE\03_Production\Assets\Tophe\Scenefiles\rig\apex\apex_v0001.hiplc"
 
     context = Logic.context_from_path(pcore, tmp_hip)
+    context_lbl = Logic.label_from_context(pcore, context)
+    print(context_lbl)
 
     output_sequence = Logic.construct_outputpath(
         pcore=pcore,

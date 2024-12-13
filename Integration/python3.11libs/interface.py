@@ -3,34 +3,41 @@ import os
 from pprint import pprint, pformat
 import json
 import logging
+# from logic import Logic
 
 
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
-# 
-try:
-    import hou
-    LOG.debug("Successfully imported Houdini modules")
-except ImportError as e:
-    LOG.warning(f"Failed to import Houdini modules: {e}")
-    # Mock Houdini module placeholder for local development
-    class MockHou:
-        def __getattr__(self, name):
-            return lambda *args, **kwargs: None
-        
-        class text:
-            @staticmethod
-            def expandString(expr):
-                return expr
-    hou = MockHou()
+# for testing recreate a mock hou. maybe we should add this as a separate module
+if __name__ == "__main__":
+    try:
+        import hou
+        LOG.debug("Successfully imported Houdini modules")
+    except ImportError as e:
+        LOG.warning(f"Failed to import Houdini modules: {e}")
+        # Mock Houdini module placeholder for local development
+        class MockHou:
+            def __getattr__(self, name):
+                return lambda *args, **kwargs: None
+            
+            class text:
+                @staticmethod
+                def expandString(expr):
+                    return expr
+                
+            class hipFile:
+                @staticmethod
+                def path():
+                    return r"e:\Projects\TOPHE\03_Production\Assets\Tophe\Scenefiles\rig\apex\apex_v0001.hiplc"
+        hou = MockHou()
 
 '''Import qtpy modules dynamically'''
 try:            
     from qtpy.QtCore import QObject, QEvent, Qt
     from qtpy.QtGui import QIcon, QPixmap
     from qtpy.QtWidgets import (
-        QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar,
+        QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar, QGroupBox,
         QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar
     )
     LOG.debug("Successfully imported qtpy modules")    
@@ -57,7 +64,7 @@ if __name__ == "__main__":
         from qtpy.QtCore import QObject, QEvent, Qt
         from qtpy.QtGui import QIcon, QPixmap
         from qtpy.QtWidgets import (
-            QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar,
+            QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar, QGroupBox,
             QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar
         )
         LOG.debug("Successfully imported qtpy modules")    
@@ -100,31 +107,46 @@ DEFAULT_SETTINGS = {
 
 
 class SaveDialog(QDialog):    
-    def __init__(self, settings, pcore, logic, hou, parent=None):
+    def __init__(self, settings: dict, pcore, logic, hou, parent=None):
         super(SaveDialog, self).__init__(parent)
         self.settings = settings
         self.hou = hou
         self.logic = logic
-        self.initUI()
         self.core = pcore
+        self.hipfile = hou.hipFile.path()
         # self.plugin = pcore.get_plugin("Save")
+
+        self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Save Interface")
 
         layout = QVBoxLayout(self)
 
+        # Create a QGroupBox to group related widgets
+        group_main = QGroupBox("General")        
+        group_layout = QVBoxLayout()
+        group_main.setLayout(group_layout)
+
+        ## Prism Context        
+        context_layout = QHBoxLayout()
+        context_label = QLabel("context:")
+        context_layout.addWidget(context_label)  
+        self.context = self.logic.context_from_path(self.core, self.hipfile)
+        self.context_preview = QLabel(self.logic.context_to_label(self.core, self.context))
+        context_layout.addWidget(self.context_preview)
+        group_layout.addLayout(context_layout)
+
         ## Identifier
         identifier_layout = QHBoxLayout()
         identifier_label = QLabel("Identifier:")
-        identifier_layout.addWidget(identifier_label) 
-        self.identifier = "my_identifier"#self.settings['identifier'] # this is an expression 
+        self.identifier = "my_identifier"  # self.settings['identifier'] # this is an expression 
         self.identifier_preview = QLabel("testo")
-        identifier_layout.addWidget(self.identifier_preview)
-        
         change_identifier_button = QPushButton("Change")
+        identifier_layout.addWidget(identifier_label) 
+        identifier_layout.addWidget(self.identifier_preview)        
         identifier_layout.addWidget(change_identifier_button)     
-        layout.addLayout(identifier_layout)   
+        group_layout.addLayout(identifier_layout)   
 
         def expand_identifier(expr):
             return self.hou.text.expandString(expr)            
@@ -134,30 +156,30 @@ class SaveDialog(QDialog):
             if ok and text:
                 self.identifier = text
             self.identifier_preview.setText(expand_identifier(self.identifier))
+            self.update_output_path()
 
         change_identifier_button.clicked.connect(change_identifier)
         self.identifier_preview.setText(expand_identifier(self.identifier)) # init
 
-        
+
+        ## Frame Range
         frame_range_label = QLabel("Frame Range:")
-        frame_range_layout = QHBoxLayout()
-        frame_range_layout.addWidget(frame_range_label)
-        
+        frame_range_layout = QHBoxLayout()        
         self.frame_range_combo = QComboBox()
         self.frame_range_combo.addItems(["Full Range", "Custom", "Single Frame"])
         self.frame_range_combo.setCurrentText("Full Range")
+        frame_range_layout.addWidget(frame_range_label)
         frame_range_layout.addWidget(self.frame_range_combo)
 
         frame_range_preview_layout = QHBoxLayout()        
         self.frame_range_start = QLineEdit(self.settings['frame_range_start'])
         self.frame_range_end = QLineEdit(self.settings['frame_range_end'])
-        # Add a spacer item to ensure the layout takes up space even when widgets are hidden
-        frame_range_preview_layout.addStretch() # like adding empty label in houdini
+        frame_range_preview_layout.addStretch()  # like adding empty label in houdini
         frame_range_preview_layout.addWidget(self.frame_range_start)
         frame_range_preview_layout.addWidget(self.frame_range_end)        
 
-        layout.addLayout(frame_range_layout)
-        layout.addLayout(frame_range_preview_layout)
+        # group_layout.addLayout(frame_range_layout)
+        # group_layout.addLayout(frame_range_preview_layout) # reenable me when you want frames
 
         def update_frame_range_inputs():
             mode = self.frame_range_combo.currentText()
@@ -174,12 +196,16 @@ class SaveDialog(QDialog):
         self.frame_range_combo.currentTextChanged.connect(update_frame_range_inputs)
         update_frame_range_inputs()  # Initialize the state
 
+
+        ## Comment
         comment_label = QLabel("Comment:")
         self.comment_text = QTextEdit(self.settings['comment'])        
         self.comment_text.setFixedHeight(50)  # Set the height to make the comment box smaller
-        layout.addWidget(comment_label)
-        layout.addWidget(self.comment_text)        
+        group_layout.addWidget(comment_label)
+        group_layout.addWidget(self.comment_text)        
 
+        ## Versioning        
+        version_layout = QHBoxLayout()
         self.autoversion_checkbox = QCheckBox("Auto Version")
         self.autoversion_checkbox.setChecked(self.settings['autoversion'])
         
@@ -187,24 +213,33 @@ class SaveDialog(QDialog):
         self.version_spinbox = QSpinBox()
         self.version_spinbox.setValue(self.settings['version'])
         
-        autoversion_layout = QHBoxLayout()
-        autoversion_layout.addWidget(self.autoversion_checkbox)
-        autoversion_layout.addWidget(version_label)
-        autoversion_layout.addWidget(self.version_spinbox)
+        version_layout.addWidget(self.autoversion_checkbox)
+        version_layout.addWidget(version_label)
+        version_layout.addWidget(self.version_spinbox)
         
-        layout.addLayout(autoversion_layout)
+        group_layout.addLayout(version_layout)
 
         def update_version_input():
             self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked())
+            # self.update_output_path()
 
         self.autoversion_checkbox.stateChanged.connect(update_version_input)
-        update_version_input()  # Initialize the state
+        # update_version_input()  # Initialize the state
+
 
         output_path_label = QLabel("Preview Path:")
         self.output_path_text = QLabel("test output path")
         self.output_path_text.setAlignment(Qt.AlignCenter)
-        layout.addWidget(output_path_label)
-        layout.addWidget(self.output_path_text)
+
+        # update output_path_text if identifier or version changes
+        def update_output_path():
+            self.output_path_text.setText(f"test_{self.identifier}_v{self.version_spinbox.value()}")
+
+        # set connections
+        self.version_spinbox.valueChanged.connect(update_output_path)
+
+        group_layout.addWidget(output_path_label)
+        group_layout.addWidget(self.output_path_text)
 
         resolution_label = QLabel("Resolution:")
         self.resolution_combo = QComboBox()
@@ -215,20 +250,47 @@ class SaveDialog(QDialog):
         resolution_layout.addWidget(resolution_label)
         resolution_layout.addWidget(self.resolution_combo)
         
-        layout.addLayout(resolution_layout)
+        group_layout.addLayout(resolution_layout)
 
         format_label = QLabel("Format:")
         self.format_combo = QComboBox()
         self.format_combo.addItems(["avif", "png", "jpg"])
         self.format_combo.setCurrentText(self.settings['format'])
-        layout.addWidget(format_label)
-        layout.addWidget(self.format_combo)
+        group_layout.addWidget(format_label)
+        group_layout.addWidget(self.format_combo)
 
-        export_video_button = QPushButton("Export Video")
-        layout.addWidget(export_video_button)
+        layout.addWidget(group_main)
 
-        export_video_button.clicked.connect(self.on_exit)
+        group_video = QGroupBox("Export Video")
+        group_video.setCheckable(True)
+        group_video_layout = QVBoxLayout()
+        group_video.setLayout(group_video_layout)
 
+        codec_label = QLabel("Video Codec:")
+        self.codec_combo = QComboBox()
+        self.codec_combo.addItem("AV1 (webm)", "av1")
+        self.codec_combo.addItem("H265 (mp4)", "h265")
+        self.codec_combo.setCurrentIndex(0)
+
+        codec_layout = QHBoxLayout()
+        codec_layout.addWidget(codec_label)
+        codec_layout.addWidget(self.codec_combo)
+
+        self.codec = self.codec_combo.currentData()
+        self.codec_combo.currentIndexChanged.connect(lambda: setattr(self, 'codec', self.codec_combo.currentData()))
+
+        group_video_layout.addLayout(codec_layout)
+
+        export_button = QPushButton("Export")
+        group_video_layout.addWidget(export_button)
+
+        export_button.clicked.connect(self.on_exit)
+
+        layout.addWidget(group_video)
+
+        # self.update_output_path()
+
+    
 
     
     def on_exit(self):       
@@ -317,7 +379,7 @@ if __name__ == "__main__":
     # from logic import Exporter, Logic
     import logic
     brains = logic.Logic()
-    dialog = SaveDialog(settings, pcore, logic=logic, hou=hou)
+    dialog = SaveDialog(settings, pcore, logic=logic.Logic, hou=hou)
 
     result = dialog.exec_()
     if result == QDialog.Accepted:
