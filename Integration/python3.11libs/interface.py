@@ -4,6 +4,10 @@ from pprint import pprint, pformat
 import json
 import logging
 # from logic import Logic
+"""
+qt visual examples here
+https://www.tecgraf.puc-rio.br/ftp_pub/lfm/Qt-Widgets-Layouts.pdf
+"""
 
 
 LOG = logging.getLogger(__name__)
@@ -38,7 +42,8 @@ try:
     from qtpy.QtGui import QIcon, QPixmap
     from qtpy.QtWidgets import (
         QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar, QGroupBox,
-        QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar
+        QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar,
+        QSizePolicy
     )
     LOG.debug("Successfully imported qtpy modules")    
 except ImportError as e:          
@@ -65,7 +70,8 @@ if __name__ == "__main__":
         from qtpy.QtGui import QIcon, QPixmap
         from qtpy.QtWidgets import (
             QApplication, QDialog, QPushButton, QWidget, QVBoxLayout, QLabel, QProgressBar, QGroupBox,
-            QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar
+            QLineEdit, QSpinBox, QHBoxLayout, QTextEdit, QCheckBox, QComboBox, QInputDialog, QProgressBar,
+            QSizePolicy
         )
         LOG.debug("Successfully imported qtpy modules")    
     except ImportError as e:          
@@ -107,209 +113,218 @@ DEFAULT_SETTINGS = {
 
 
 class SaveDialog(QDialog):    
-    def __init__(self, settings: dict, pcore, logic, hou, parent=None):
+    def __init__(self, settings: dict, pcore, Logic, hou, parent=None):
         super(SaveDialog, self).__init__(parent)
+
         self.settings = settings
         self.hou = hou
-        self.logic = logic
+        self.logic = Logic # static class 
         self.core = pcore
         self.hipfile = hou.hipFile.path()
         # self.plugin = pcore.get_plugin("Save")
 
-        self.initUI()
+        # Internal state
+        self.context = self.context = self.logic.context_from_path(
+            self.core, self.hipfile
+        )
+        self.identifier = "my_identifier"
+        self.version = 1
 
-    def initUI(self):
+        self._init_ui()        
+
+    def _init_ui(self):
+        """Initialize the user interface."""
         self.setWindowTitle("Save Interface")
+        self.resize(400, 600) # TODO remember settings for next time
 
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
 
-        # Create a QGroupBox to group related widgets
-        group_main = QGroupBox("General")        
+        # Create main groups
+        general_group = self._create_general_group()
+        video_group = self._create_video_group()
+
+        main_layout.addWidget(general_group)
+        main_layout.addWidget(video_group)
+
+        export_button = QPushButton("Export")
+        main_layout.addWidget(export_button)
+        export_button.clicked.connect(self.on_exit)
+
+
+    def _create_general_group(self):
+        """Create the 'General' settings group box."""
+        group_main = QGroupBox("General")
         group_layout = QVBoxLayout()
         group_main.setLayout(group_layout)
 
-        ## Prism Context        
+        group_main.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
+
+        # Context section
         context_layout = QHBoxLayout()
-        context_label = QLabel("context:")
-        context_layout.addWidget(context_label)  
-        self.context = self.logic.context_from_path(self.core, self.hipfile)
-        self.context_preview = QLabel(self.logic.context_to_label(self.core, self.context))
+        context_label = QLabel("context:")        
+        self.context_preview = QLabel(
+            self.logic.context_to_label(self.core, self.context)
+        )
+        context_layout.addWidget(context_label)
         context_layout.addWidget(self.context_preview)
         group_layout.addLayout(context_layout)
 
-        ## Identifier
+        # Identifier section
         identifier_layout = QHBoxLayout()
         identifier_label = QLabel("Identifier:")
-        self.identifier = "my_identifier"  # self.settings['identifier'] # this is an expression 
-        self.identifier_preview = QLabel("testo")
+        self.identifier_preview = QLabel()
         change_identifier_button = QPushButton("Change")
-        identifier_layout.addWidget(identifier_label) 
-        identifier_layout.addWidget(self.identifier_preview)        
-        identifier_layout.addWidget(change_identifier_button)     
-        group_layout.addLayout(identifier_layout)   
+        identifier_layout.addWidget(identifier_label)
+        identifier_layout.addWidget(self.identifier_preview)
+        identifier_layout.addWidget(change_identifier_button)
+        group_layout.addLayout(identifier_layout)
 
         def expand_identifier(expr):
-            return self.hou.text.expandString(expr)            
+            return self.hou.text.expandString(expr)
 
         def change_identifier():
-            text, ok = QInputDialog.getText(self, "Change Identifier Expression", "Identifier Expression:", QLineEdit.Normal, self.identifier)
+            text, ok = QInputDialog.getText(
+                self,
+                "Change Identifier Expression",
+                "Identifier Expression:",
+                QLineEdit.Normal,
+                self.identifier,
+            )
             if ok and text:
                 self.identifier = text
             self.identifier_preview.setText(expand_identifier(self.identifier))
-            self.update_output_path()
+            update_output_path()
 
-        change_identifier_button.clicked.connect(change_identifier)
-        self.identifier_preview.setText(expand_identifier(self.identifier)) # init
-
-
-        ## Frame Range
-        frame_range_label = QLabel("Frame Range:")
-        frame_range_layout = QHBoxLayout()        
-        self.frame_range_combo = QComboBox()
-        self.frame_range_combo.addItems(["Full Range", "Custom", "Single Frame"])
-        self.frame_range_combo.setCurrentText("Full Range")
-        frame_range_layout.addWidget(frame_range_label)
-        frame_range_layout.addWidget(self.frame_range_combo)
-
-        frame_range_preview_layout = QHBoxLayout()        
-        self.frame_range_start = QLineEdit(self.settings['frame_range_start'])
-        self.frame_range_end = QLineEdit(self.settings['frame_range_end'])
-        frame_range_preview_layout.addStretch()  # like adding empty label in houdini
-        frame_range_preview_layout.addWidget(self.frame_range_start)
-        frame_range_preview_layout.addWidget(self.frame_range_end)        
-
-        # group_layout.addLayout(frame_range_layout)
-        # group_layout.addLayout(frame_range_preview_layout) # reenable me when you want frames
-
-        def update_frame_range_inputs():
-            mode = self.frame_range_combo.currentText()
-            if mode == "Full Range":
-                self.frame_range_start.setHidden(True)
-                self.frame_range_end.setHidden(True)
-            elif mode == "Custom":
-                self.frame_range_start.setHidden(False)
-                self.frame_range_end.setHidden(False)
-            elif mode == "Single Frame":
-                self.frame_range_start.setHidden(False)
-                self.frame_range_end.setHidden(True)
-
-        self.frame_range_combo.currentTextChanged.connect(update_frame_range_inputs)
-        update_frame_range_inputs()  # Initialize the state
+        self.identifier_preview.setText(expand_identifier(self.identifier))
 
 
-        ## Comment
-        comment_label = QLabel("Comment:")
-        self.comment_text = QTextEdit(self.settings['comment'])        
-        self.comment_text.setFixedHeight(50)  # Set the height to make the comment box smaller
-        group_layout.addWidget(comment_label)
-        group_layout.addWidget(self.comment_text)        
-
-        ## Versioning        
+        # Versioning
         version_layout = QHBoxLayout()
         self.autoversion_checkbox = QCheckBox("Auto Version")
-        self.autoversion_checkbox.setChecked(self.settings['autoversion'])
-        
+        self.autoversion_checkbox.setChecked(self.settings["autoversion"])
+
         version_label = QLabel("Version:")
         self.version_spinbox = QSpinBox()
-        self.version_spinbox.setValue(self.settings['version'])
+        self.version_spinbox.setValue(self.settings["version"])
         
         version_layout.addWidget(self.autoversion_checkbox)
+        version_layout.addStretch()
         version_layout.addWidget(version_label)
         version_layout.addWidget(self.version_spinbox)
-        
         group_layout.addLayout(version_layout)
 
         def update_version_input():
             self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked())
-            # self.update_output_path()
 
         self.autoversion_checkbox.stateChanged.connect(update_version_input)
-        # update_version_input()  # Initialize the state
 
 
-        output_path_label = QLabel("Preview Path:")
-        self.output_path_text = QLabel("test output path")
-        self.output_path_text.setAlignment(Qt.AlignCenter)
-
-        # update output_path_text if identifier or version changes
-        def update_output_path():
-            self.output_path_text.setText(f"test_{self.identifier}_v{self.version_spinbox.value()}")
-
-        # set connections
-        self.version_spinbox.valueChanged.connect(update_output_path)
-
-        group_layout.addWidget(output_path_label)
-        group_layout.addWidget(self.output_path_text)
-
-        resolution_label = QLabel("Resolution:")
-        self.resolution_combo = QComboBox()
-        self.resolution_combo.addItems(["as is", "stretch"])
-        self.resolution_combo.setCurrentText(self.settings['resolution'])
-        
-        resolution_layout = QHBoxLayout()
-        resolution_layout.addWidget(resolution_label)
-        resolution_layout.addWidget(self.resolution_combo)
-        
-        group_layout.addLayout(resolution_layout)
-
+        # Format
+        format_layout = QHBoxLayout()
         format_label = QLabel("Format:")
         self.format_combo = QComboBox()
         self.format_combo.addItems(["avif", "png", "jpg"])
-        self.format_combo.setCurrentText(self.settings['format'])
-        group_layout.addWidget(format_label)
-        group_layout.addWidget(self.format_combo)
+        self.format_combo.setCurrentText(self.settings["format"])
+        self.format_combo.setCurrentIndex(2)  # use jpg for now
+        format_layout.addWidget(format_label)
+        format_layout.addWidget(self.format_combo)
+        group_layout.addLayout(format_layout)
 
-        layout.addWidget(group_main)
+        
+        # Output path preview
+        output_path_label = QLabel("Preview Path:")
+        self.output_path_text = QLabel("test output path")
+        self.output_path_text.setAlignment(Qt.AlignCenter)
+        group_layout.addWidget(output_path_label)
+        group_layout.addWidget(self.output_path_text)
 
+        def update_output_path():
+            full_text = f"test_{self.identifier}_v{self.version_spinbox.value()}"
+            if len(full_text) > 25:
+                text = "..." + full_text[-22:]
+            else:
+                text = full_text
+            self.output_path_text.setText(text)               
+            
+
+
+        # Comment section
+        comment_group = QGroupBox("Comment")
+        comment_group.setCheckable(True)
+        comment_layout = QVBoxLayout()
+        # comment_label = QLabel("Comment:")
+        self.comment_text = QTextEdit(self.settings["comment"])
+        self.comment_text.setFixedHeight(60)
+        comment_layout.addWidget(self.comment_text)
+        comment_group.setLayout(comment_layout)
+        group_layout.addWidget(comment_group)        
+        # comment_layout.addWidget(comment_label)
+
+        # Resolution
+        resolution_layout = QHBoxLayout()
+        resolution_label = QLabel("Resolution:")
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems(["as is", "stretch"])
+        self.resolution_combo.setCurrentText(self.settings["resolution"])
+        resolution_layout.addWidget(resolution_label)
+        resolution_layout.addWidget(self.resolution_combo)
+        # group_layout.addLayout(resolution_layout)
+
+        
+
+        # Connect signals
+        change_identifier_button.clicked.connect(change_identifier)
+        self.version_spinbox.valueChanged.connect(update_output_path)        
+
+        update_output_path()  # Initialize output path once widgets are ready
+        update_version_input()
+
+        return group_main
+    
+    def _create_video_group(self):
+        """Create the 'Export Video' settings group box."""
         group_video = QGroupBox("Export Video")
         group_video.setCheckable(True)
         group_video_layout = QVBoxLayout()
         group_video.setLayout(group_video_layout)
 
+        codec_layout = QHBoxLayout()
         codec_label = QLabel("Video Codec:")
         self.codec_combo = QComboBox()
         self.codec_combo.addItem("AV1 (webm)", "av1")
         self.codec_combo.addItem("H265 (mp4)", "h265")
         self.codec_combo.setCurrentIndex(0)
-
-        codec_layout = QHBoxLayout()
         codec_layout.addWidget(codec_label)
         codec_layout.addWidget(self.codec_combo)
-
-        self.codec = self.codec_combo.currentData()
-        self.codec_combo.currentIndexChanged.connect(lambda: setattr(self, 'codec', self.codec_combo.currentData()))
-
         group_video_layout.addLayout(codec_layout)
-
-        export_button = QPushButton("Export")
-        group_video_layout.addWidget(export_button)
-
-        export_button.clicked.connect(self.on_exit)
-
-        layout.addWidget(group_video)
-
-        # self.update_output_path()
-
-    
-
-    
-    def on_exit(self):       
-        new_settings = {
-            'identifier': self.identifier,
-            'frame_range_start': self.frame_range_start.text(),
-            'frame_range_end': self.frame_range_end.text(),
-            'comment': self.comment_text.toPlainText(),
-            'autoversion': self.autoversion_checkbox.isChecked(),
-            'version': self.version_spinbox.value(),
-            'output_path': self.output_path_text.text(),
-            'resolution': self.resolution_combo.currentText(),
-            'image_format': self.format_combo.currentText()
-        }
         
+        self.codec = self.codec_combo.currentData()
+        self.codec_combo.currentIndexChanged.connect(
+            lambda: setattr(self, "codec", self.codec_combo.currentData())
+        )
+
+        return group_video   
+    
+
+    
+    def on_exit(self):
+        """Gather settings and close the dialog."""
+        new_settings = {
+            "identifier": self.identifier,
+            "frame_range_start": self.settings["frame_range_start"],  # Not currently updated in UI
+            "frame_range_end": self.settings["frame_range_end"],  # Not currently updated in UI
+            "comment": self.comment_text.toPlainText(),
+            "autoversion": self.autoversion_checkbox.isChecked(),
+            "version": self.version_spinbox.value(),
+            "output_path": self.output_path_text.text(),
+            "resolution": self.resolution_combo.currentText(),
+            "image_format": self.format_combo.currentText(),
+        }
         self.settings = new_settings
         self.accept()
         
     def get_settings(self):
+        """Return the updated settings."""
         return self.settings
 
 
@@ -379,7 +394,7 @@ if __name__ == "__main__":
     # from logic import Exporter, Logic
     import logic
     brains = logic.Logic()
-    dialog = SaveDialog(settings, pcore, logic=logic.Logic, hou=hou)
+    dialog = SaveDialog(settings, pcore, logic.Logic, hou=hou)
 
     result = dialog.exec_()
     if result == QDialog.Accepted:

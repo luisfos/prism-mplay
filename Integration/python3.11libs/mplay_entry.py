@@ -91,7 +91,7 @@ def debug(kwargs=None):
     settings = interface.DEFAULT_SETTINGS
 
     brain = logic.Logic()
-    dialog = interface.SaveDialog(settings, pcore, logic, hou)
+    dialog = interface.SaveDialog(settings, pcore, logic.Logic, hou)
     result = dialog.exec_()
 
     if result:
