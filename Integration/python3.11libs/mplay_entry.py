@@ -85,13 +85,13 @@ def debug(kwargs=None):
 
     import hou
     print(hou.hipFile.path())
-    return
+    # return
 
     import interface
     settings = interface.DEFAULT_SETTINGS
 
     brain = logic.Logic()
-    dialog = interface.SaveDialog(settings, pcore, brain)
+    dialog = interface.SaveDialog(settings, pcore, logic, hou)
     result = dialog.exec_()
 
     if result:

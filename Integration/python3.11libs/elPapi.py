@@ -50,6 +50,25 @@ import os
 from pathlib import Path
 from abc import ABC, abstractmethod
 
+# vocabulary:
+'''
+entity == shot or asset
+entityfolder == sequence or assetfolder
+
+'''
+
+# relationships
+# {'entity': ['Export', 'Playblasts', 'Renders', 'Scenefiles'],}
+# everything should be lowercase
+relationships ={
+    "project": ["assetfolder", "sequences"],
+    "entity": ["scenefiles","products", "media"],
+    "media": ["identifier"], # do we treat folder playblasts renders as a property of media?
+    "scenefiles": ["departments"],
+    "departments": ["tasks"],
+}
+
+
 class Node:
     def __init__(self):
         self.path = None # file/folder path on disk
@@ -140,7 +159,7 @@ class Sequence(Node):
         return f"Sequence: {self.name}"
 
 
-class ShotOrAsset(Node):
+class ShotOrAsset(Node): # also known as entity?
     def __init__(self, path: str, type: str=""):        
         super().__init__(path)
         self.type = type

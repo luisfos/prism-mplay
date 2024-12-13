@@ -32,6 +32,72 @@ class Logic:
                 value.replace(f"@{subkey}@", self.expand_structure(full_structure, subkey))        
         return value        
     
+    @staticmethod
+    def get_entity_path(pcore, filepath=None, context=None) -> Path:
+        '''
+        Get the entity path from a file path or context
+        filepath can be a scenefile or any existing file in the project
+        so that we can derive a context from the filepath        
+        '''
+        # temp setup prism for IDE
+        # import common
+        # common.setup_imports() 
+        # import PrismCore  
+        # pcore = PrismCore.create(app="Standalone", prismArgs=["noUI"])
+        #
+
+        if not filepath and not context:
+            raise ValueError("Either filepath or context must be provided")
+        
+        if filepath:
+            file_context = pcore.getScenefileData(filepath)
+            # file_context = file_context.copy()
+            remove = ["scenefile", "comment", "extension", "locations",
+                  "project_name", "version", "user", "username", "filename",
+                  "department", "task",
+                  ]
+            for key in remove:
+                if key in file_context:
+                    del file_context[key]    
+            context = file_context
+            print("got context", context)
+        
+        if context:                
+            # get the entity_path template
+            structure = pcore.projects.getProjectStructure()
+            if context.get("type") == "asset":
+                key = "assets"
+                # template = structure.get("assets")['value']
+            elif context.get("type") == "shot":
+                key = "shots"
+                # template = structure.get("shots")['value']
+            
+            # combine template + context to get filepath
+            # turns out all we need is structure key + context to get filepath            
+            entity_path = pcore.projects.getResolvedProjectStructurePath(key, context=context)                       
+            return Path(entity_path), context     
+
+    @staticmethod
+    def context_from_path(pcore, filepath):
+        '''
+        Get the context from a filepath
+        Cleans up context for our playblasts
+        '''      
+        file_context = pcore.getScenefileData(filepath)
+        
+        # remove what we don't need, at least for playblasts
+        # maybe this needs to be different if we use this function for other things
+        remove = ["scenefile", "comment", "extension", "locations",
+                "project_name", "version", "user", "username", "filename",
+                "department", "task",
+                ]
+        for key in remove:
+            if key in file_context:
+                del file_context[key]    
+        
+        return file_context
+        
+
     def get_prism_context(self, prismcore):
         '''Get the current context'''
 
@@ -92,21 +158,45 @@ class Logic:
         
 
     @staticmethod
-    def construct_outputpath(location, identifier, version, format):
+    def construct_outputpath(pcore, identifier, version, format, context):
         """
-        location is the base path GET THIS FROM PRISM?
         identifier is name of the flipbook
         version is the version number
 
+        location is equivalent to "Playblasts" structure
+        @entity_path@/Playblasts/@identifier@ (remove the identifier part?)
+        maybe location should just be @entity_path@
+
         example:
         S:\job\R318\03_Production\Shots\SQ100\sh_030\Playblasts\Effects\v0019\SQ100-sh_030_Effects_v0019.1001.jpg
-        """
+        E:\Projects\TOPHE\03_Production\Assets\Tophe\Playblasts\apex\v0005\apex_v0005.0001.exr
+        """        
 
-        # REPLACE WITH PRISM METHOD
-
+        # check the required context keys exist
+        required_keys = ["type", "project_path"]
+        for key in required_keys:
+            if key not in context:
+                raise ValueError(f"Context is missing key: {key}")
+        # location, context = Logic.get_entity_path(pcore, filepath=scenefile, context=None)
+        
         identifier = identifier.replace(" ", "_")
-        output = Path(location) / f"{identifier}/v{version:04d}/{identifier}_v{version:04d}.$F4{format}"
-        output = output.as_posix()
+        context['identifier'] = identifier
+        context['version'] = version
+        context['extension'] = format
+
+        if context.get("type") == "asset":
+            key = "playblastFilesAssets"
+        elif context.get("type") == "shot":
+            key = "playblastFilesShots"
+        
+        playblast_path = pcore.projects.getResolvedProjectStructurePath(
+            key, context=context
+        )   
+        
+        # replace @frame expression with houdini
+        playblast_path = playblast_path.replace("@.(frame)@", ".$F4")
+        
+        output = Path(playblast_path).as_posix() # ensure forward slashes        
         # output = output.replace("$F4", "\$F4") # stop hscript from expanding
         return output
 
@@ -206,8 +296,7 @@ class Exporter:
         # When doing "Current", there is no way to query MPlay for seq name
         # we need a location to save the file, this should be from settings       
         #  
-        output_sequence = logic.construct_outputpath(
-            self.settings.get("location"),
+        output_sequence = self.logic.construct_outputpath(
             self.settings.get("identifier"),
             self.settings.get("version"),
             self.settings.get("image_format"),
@@ -217,8 +306,7 @@ class Exporter:
         self.queue.append(write_seq_job)   
 
         if convert_video:
-            output_video = logic.construct_outputpath(
-                self.settings.get("location"),
+            output_video = self.logic.construct_outputpath(
                 self.settings.get("identifier"),
                 self.settings.get("version"),
                 self.settings.get("video_format"),
@@ -241,24 +329,39 @@ if __name__ == "__main__":
     }
 
 
+    # temp setup prism
+    import common
+    common.setup_imports() 
+    import PrismCore  
+    pcore = PrismCore.create(app="Standalone", prismArgs=["noUI"])
+    ## 
 
-    logic = Logic()
-    logic.get_prism_context(None)
+    # logic = Logic()
+    # logic.get_prism_context(None)
+    
+    
+    # location = logic.get_entity_path(pcore, filepath=tmp_hip)
 
     # exporter = Exporter(settings, logic, dryrun=True)
     # # exporter.add_current_sequence(convert_video=False)
-
-    # output_sequence = logic.construct_outputpath(
-    #     settings.get("location"),
-    #     settings.get("identifier"),
-    #     settings.get("version"),
-    #     settings.get("image_format"),
-    # )
-
-
     
+    # hipPath = hou.hipFile.path()
+    tmp_hip =r"e:\Projects\TOPHE\03_Production\Assets\Tophe\Scenefiles\rig\apex\apex_v0001.hiplc"
+
+    context = Logic.context_from_path(pcore, tmp_hip)
+
+    output_sequence = Logic.construct_outputpath(
+        pcore=pcore,
+        identifier="my bacon",
+        version="v0001",
+        format=".jpg",      
+        context=context,  
+    )
+    print(output_sequence)
 
 
 
 
-    
+
+
+

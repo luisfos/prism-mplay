@@ -8,8 +8,25 @@ import logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
+# 
+try:
+    import hou
+    LOG.debug("Successfully imported Houdini modules")
+except ImportError as e:
+    LOG.warning(f"Failed to import Houdini modules: {e}")
+    # Mock Houdini module placeholder for local development
+    class MockHou:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+        
+        class text:
+            @staticmethod
+            def expandString(expr):
+                return expr
+    hou = MockHou()
+
 '''Import qtpy modules dynamically'''
-try:        
+try:            
     from qtpy.QtCore import QObject, QEvent, Qt
     from qtpy.QtGui import QIcon, QPixmap
     from qtpy.QtWidgets import (
@@ -83,9 +100,10 @@ DEFAULT_SETTINGS = {
 
 
 class SaveDialog(QDialog):    
-    def __init__(self, settings, pcore, logic, parent=None):
+    def __init__(self, settings, pcore, logic, hou, parent=None):
         super(SaveDialog, self).__init__(parent)
         self.settings = settings
+        self.hou = hou
         self.logic = logic
         self.initUI()
         self.core = pcore
@@ -109,8 +127,7 @@ class SaveDialog(QDialog):
         layout.addLayout(identifier_layout)   
 
         def expand_identifier(expr):
-            # to do eventually with hou.expandString()
-            return expr            
+            return self.hou.text.expandString(expr)            
 
         def change_identifier():
             text, ok = QInputDialog.getText(self, "Change Identifier Expression", "Identifier Expression:", QLineEdit.Normal, self.identifier)
@@ -212,6 +229,8 @@ class SaveDialog(QDialog):
 
         export_video_button.clicked.connect(self.on_exit)
 
+
+    
     def on_exit(self):       
         new_settings = {
             'identifier': self.identifier,
@@ -295,9 +314,10 @@ if __name__ == "__main__":
 
     settings = DEFAULT_SETTINGS
 
-    from logic import Exporter, Logic
-    brains = Logic()
-    dialog = SaveDialog(settings, pcore, logic=brains)
+    # from logic import Exporter, Logic
+    import logic
+    brains = logic.Logic()
+    dialog = SaveDialog(settings, pcore, logic=logic, hou=hou)
 
     result = dialog.exec_()
     if result == QDialog.Accepted:
@@ -306,7 +326,7 @@ if __name__ == "__main__":
         print("Dialog accepted")
         print(modified_settings)
 
-        exporter = Exporter(settings, brains, dryrun=True)
+        exporter = logic.Exporter(settings, brains, dryrun=True)
 
         progress_dialog = ProgressDialog(exporter)
         progress_dialog.show()
