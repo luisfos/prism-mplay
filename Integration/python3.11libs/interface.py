@@ -129,6 +129,7 @@ class SaveDialog(QDialog):
         )
         self.identifier = "my_identifier"
         self.version = 1
+        self.image_format = ".jpg"
 
         self._init_ui()        
 
@@ -214,7 +215,16 @@ class SaveDialog(QDialog):
         group_layout.addLayout(version_layout)
 
         def update_version_input():
-            self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked())
+            # if turning autoversion on
+            if self.autoversion_checkbox.isChecked():
+                self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked()) # lock the spinbox
+                self.version_spinbox.setValue(self.version_spinbox.value() + 1)
+                
+            # if turning autoversion off
+            else:
+                pass
+                    
+                    
 
         self.autoversion_checkbox.stateChanged.connect(update_version_input)
 
@@ -230,6 +240,11 @@ class SaveDialog(QDialog):
         format_layout.addWidget(self.format_combo)
         group_layout.addLayout(format_layout)
 
+        self.image_format = self.format_combo.currentText()
+        self.format_combo.currentIndexChanged.connect(
+            lambda: setattr(self, "image_format", self.format_combo.currentText())
+        )
+
         
         # Output path preview
         output_path_label = QLabel("Preview Path:")
@@ -239,7 +254,10 @@ class SaveDialog(QDialog):
         group_layout.addWidget(self.output_path_text)
 
         def update_output_path():
-            full_text = f"test_{self.identifier}_v{self.version_spinbox.value()}"
+            full_text = self.logic.construct_outputpath(
+                self.core, self.identifier, self.version, self.image_format, self.context
+            )
+            # full_text = f"test_{self.identifier}_v{self.version_spinbox.value()}"
             if len(full_text) > 25:
                 text = "..." + full_text[-22:]
             else:

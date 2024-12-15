@@ -19,18 +19,7 @@ class Logic:
     # for use with Qt interface
     def __init__(self):
         pass
-
-    def expand_structure(self, full_structure, key):
-        '''Recursively expand the prism structure'''
-        print("key is", key)        
-        pprint(full_structure)
-        one_structure = full_structure.get(key)
-        print("one_structure is", one_structure)
-        value = one_structure.get("value")
-        if one_structure.get("requires"): # if has requirements
-            for subkey in one_structure.get("requires"):
-                value.replace(f"@{subkey}@", self.expand_structure(full_structure, subkey))        
-        return value        
+   
     
     @staticmethod
     def context_to_label(pcore, context, status=False):
@@ -193,6 +182,46 @@ class Logic:
         
 
     @staticmethod
+    def get_latest_playblast_version(pcore, identifier, version, format, context):
+        '''Get the latest playblast version'''
+
+        
+        path = Logic.construct_outputpath(pcore, identifier, version, format, context)
+        print("me path", path)
+
+        keep = ["asset", "asset_path", "shot", "sequence", "type", "project_path", "project_name"]
+        _temp_context = context.copy()
+        for key in context.keys():
+            if key not in keep:
+                del _temp_context[key]
+
+        
+        _temp_context['identifier'] = identifier
+        _temp_context['mediaType'] = "playblasts"       
+        print("temp context", _temp_context)
+
+        idk = pcore.mediaProducts.getHighestMediaVersion(context, getExisting=True)
+        print("idk", idk)
+        # wait for prism response
+        return
+
+        
+        # context = pcore.mediaProducts.getDataFromFilepath(path)
+        # context = pcore.mediaProducts.getVersionFromPlayblastFilepath(path)
+        _temp_version = pcore.mediaProducts.getVersionsFromIdentifier(_temp_context)        
+        latest = pcore.mediaProducts.getLatestVersionFromVersions(_temp_version)
+        version = pcore.versionFormat % 1
+        if latest:                        
+            _temp_version = int(latest.get('version', '')[1:])
+            _temp_version += 1
+            version = pcore.versionFormat % _temp_version   
+
+        print("me contex", context)
+        print("version", version)
+        return context
+        pass
+
+    @staticmethod
     def construct_outputpath(pcore, identifier, version, format, context):
         """
         identifier is name of the flipbook
@@ -212,7 +241,7 @@ class Logic:
         for key in required_keys:
             if key not in context:
                 raise ValueError(f"Context is missing key: {key}")
-        # location, context = Logic.get_entity_path(pcore, filepath=scenefile, context=None)
+        
         
         identifier = identifier.replace(" ", "_")
         context['identifier'] = identifier
@@ -377,18 +406,23 @@ if __name__ == "__main__":
     # hipPath = hou.hipFile.path()
     tmp_hip =r"e:\Projects\TOPHE\03_Production\Assets\Tophe\Scenefiles\rig\apex\apex_v0001.hiplc"
 
+    oldpath = r"E:\Projects\TOPHE\03_Production\Assets\Tophe\Playblasts\apex\v0001"
     context = Logic.context_from_path(pcore, tmp_hip)
-    context_lbl = Logic.label_from_context(pcore, context)
+    context_lbl = Logic.context_to_label(pcore, context)
+
     print(context_lbl)
 
-    output_sequence = Logic.construct_outputpath(
-        pcore=pcore,
-        identifier="my bacon",
-        version="v0001",
-        format=".jpg",      
-        context=context,  
-    )
-    print(output_sequence)
+    # output_sequence = Logic.construct_outputpath(
+    #     pcore=pcore,
+    #     identifier="my bacon",
+    #     version="v0001",
+    #     format=".jpg",      
+    #     context=context,  
+    # )
+
+    context = Logic.get_latest_playblast_version(pcore, "apex", "v0001", ".jpg", context)
+    
+    # print(output_sequence)
 
 
 
