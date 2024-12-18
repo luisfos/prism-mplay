@@ -102,7 +102,7 @@ class Logic:
             return Path(entity_path), context     
 
     @staticmethod
-    def context_from_path(pcore, filepath):
+    def context_from_path(pcore, filepath, ensure_project=True):
         '''
         Get the context from a filepath
         Cleans up context for our playblasts
@@ -118,6 +118,11 @@ class Logic:
         for key in remove:
             if key in file_context:
                 del file_context[key]    
+
+        # fix prism core project_path. this is needed for some prism functions
+        if ensure_project:
+            if 'project_path' in file_context:                
+                pcore.changeProject(file_context['project_path'])
         
         return file_context
         
@@ -182,45 +187,39 @@ class Logic:
         
 
     @staticmethod
-    def get_latest_playblast_version(pcore, identifier, version, format, context):
-        '''Get the latest playblast version'''
+    def get_latest_playblast_version(pcore, context: dict, identifier: str="") -> int:
+        '''
+        Get the latest playblast version 
+        Returns zero if no version found
+        '''
+        assert hasattr(pcore, "projectPath"), "Prism project not defined"                           
 
-        
-        path = Logic.construct_outputpath(pcore, identifier, version, format, context)
-        print("me path", path)
 
-        keep = ["asset", "asset_path", "shot", "sequence", "type", "project_path", "project_name"]
+        # copy because dict mutable
         _temp_context = context.copy()
+        keep = ["asset", "asset_path", "shot", "sequence", "type", "project_path", "project_name"]
         for key in context.keys():
             if key not in keep:
                 del _temp_context[key]
-
         
-        _temp_context['identifier'] = identifier
-        _temp_context['mediaType'] = "playblasts"       
-        print("temp context", _temp_context)
+        _temp_context['mediaType'] = "playblasts"         
+        if identifier != "":
+            _temp_context['identifier'] = identifier
 
-        idk = pcore.mediaProducts.getHighestMediaVersion(context, getExisting=True)
-        print("idk", idk)
-        # wait for prism response
-        return
+        assert 'identifier' in _temp_context, "Context missing identifier or not provided in function arguments"
 
+        LOG.debug(f"Context provided to search for latest playblast: {_temp_context}")
         
-        # context = pcore.mediaProducts.getDataFromFilepath(path)
-        # context = pcore.mediaProducts.getVersionFromPlayblastFilepath(path)
-        _temp_version = pcore.mediaProducts.getVersionsFromIdentifier(_temp_context)        
-        latest = pcore.mediaProducts.getLatestVersionFromVersions(_temp_version)
-        version = pcore.versionFormat % 1
-        if latest:                        
-            _temp_version = int(latest.get('version', '')[1:])
-            _temp_version += 1
-            version = pcore.versionFormat % _temp_version   
-
-        print("me contex", context)
-        print("version", version)
-        return context
-        pass
-
+        has_versions = len(pcore.mediaProducts.getVersionsFromContext(_temp_context))>0        
+        version = 0
+        if has_versions:
+            # get the version string with v prefix
+            highest_v_str = pcore.mediaProducts.getHighestMediaVersion(_temp_context, getExisting=True)                        
+            version = int(highest_v_str[1:])      
+                 
+        # convert to int
+        return version               
+        
     @staticmethod
     def construct_outputpath(pcore, identifier, version, format, context):
         """
@@ -241,7 +240,13 @@ class Logic:
         for key in required_keys:
             if key not in context:
                 raise ValueError(f"Context is missing key: {key}")
+            
+        # if version is an int, convert to string
+        if isinstance(version, int):
+            version = pcore.versionFormat % version
         
+        assert isinstance(version, str), "Version must be a string"
+        assert version.startswith("v"), "Version must start with 'v'"
         
         identifier = identifier.replace(" ", "_")
         context['identifier'] = identifier
@@ -398,8 +403,9 @@ if __name__ == "__main__":
     common.setup_imports() 
     import PrismCore  
     pcore = PrismCore.create(app="Standalone", prismArgs=["noUI"])
+    pcore.changeProject(r"E:\Projects\TOPHE")
     ## 
-
+    
     # logic = Logic()
     # logic.get_prism_context(None)
         
@@ -419,8 +425,9 @@ if __name__ == "__main__":
     #     format=".jpg",      
     #     context=context,  
     # )
+    # print("proj vars", pcore.projectPath, pcore.projectName)
 
-    context = Logic.get_latest_playblast_version(pcore, "apex", "v0001", ".jpg", context)
+    context = Logic.get_latest_playblast_version(pcore, context, "apex")
     
     # print(output_sequence)
 

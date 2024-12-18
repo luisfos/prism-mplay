@@ -127,8 +127,10 @@ class SaveDialog(QDialog):
         self.context = self.context = self.logic.context_from_path(
             self.core, self.hipfile
         )
+        
         self.identifier = "my_identifier"
-        self.version = 1
+        self.latest_version = 1 # internal latest version from prism
+        self.version = 1 # user defined version
         self.image_format = ".jpg"
 
         self._init_ui()        
@@ -194,7 +196,7 @@ class SaveDialog(QDialog):
             if ok and text:
                 self.identifier = text
             self.identifier_preview.setText(expand_identifier(self.identifier))
-            update_output_path()
+            update_version_input()
 
         self.identifier_preview.setText(expand_identifier(self.identifier))
 
@@ -217,14 +219,17 @@ class SaveDialog(QDialog):
         def update_version_input():
             # if turning autoversion on
             if self.autoversion_checkbox.isChecked():
-                self.version_spinbox.setEnabled(not self.autoversion_checkbox.isChecked()) # lock the spinbox
-                self.version_spinbox.setValue(self.version_spinbox.value() + 1)
-                
-            # if turning autoversion off
+                self.version_spinbox.setEnabled(False) # lock the spinbox
+                self.latest_version = self.logic.get_latest_playblast_version(
+                        self.core, self.context, self.identifier
+                    )
+                self.version_spinbox.setValue(self.latest_version + 1) 
             else:
-                pass
-                    
-                    
+                self.version_spinbox.setEnabled(True)
+            self.version = self.version_spinbox.value()
+
+            update_output_path()
+                 
 
         self.autoversion_checkbox.stateChanged.connect(update_version_input)
 
@@ -258,8 +263,8 @@ class SaveDialog(QDialog):
                 self.core, self.identifier, self.version, self.image_format, self.context
             )
             # full_text = f"test_{self.identifier}_v{self.version_spinbox.value()}"
-            if len(full_text) > 25:
-                text = "..." + full_text[-22:]
+            if len(full_text) > 35:
+                text = "..." + full_text[-32:]
             else:
                 text = full_text
             self.output_path_text.setText(text)               
