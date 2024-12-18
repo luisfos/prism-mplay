@@ -102,10 +102,25 @@ class Logic:
             return Path(entity_path), context     
 
     @staticmethod
-    def context_from_path(pcore, filepath, ensure_project=True):
+    def fix_pcore_project(pcore, context) -> None:
+        '''
+        Fix prism project path
+        This will ALTER the prism core to ensure prism internal functions work correctly.
+        it is an unfortunate workaround that prism cannot sort itself out
+        using project_path from context dict
+        '''
+        if not hasattr(pcore, "projectPath"):
+            assert 'project_path' in context, "Context missing project_path"        
+            pcore.changeProject(context['project_path'])    
+
+    @staticmethod
+    def context_from_path(pcore, filepath):
         '''
         Get the context from a filepath
         Cleans up context for our playblasts
+        
+        
+        maybe this modification should be another function that is explicit
         '''      
         file_context = pcore.getScenefileData(filepath)
         
@@ -117,12 +132,7 @@ class Logic:
                 ]
         for key in remove:
             if key in file_context:
-                del file_context[key]    
-
-        # fix prism core project_path. this is needed for some prism functions
-        if ensure_project:
-            if 'project_path' in file_context:                
-                pcore.changeProject(file_context['project_path'])
+                del file_context[key]            
         
         return file_context
         
@@ -222,7 +232,7 @@ class Logic:
         
     @staticmethod
     def construct_outputpath(pcore, identifier, version, format, context):
-        """
+        """        
         identifier is name of the flipbook
         version is the version number
 
@@ -247,7 +257,7 @@ class Logic:
         
         assert isinstance(version, str), "Version must be a string"
         assert version.startswith("v"), "Version must start with 'v'"
-        
+
         identifier = identifier.replace(" ", "_")
         context['identifier'] = identifier
         context['version'] = version

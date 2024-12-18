@@ -11,7 +11,7 @@ https://www.tecgraf.puc-rio.br/ftp_pub/lfm/Qt-Widgets-Layouts.pdf
 
 
 LOG = logging.getLogger(__name__)
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.WARNING)
 
 # for testing recreate a mock hou. maybe we should add this as a separate module
 if __name__ == "__main__":
@@ -127,6 +127,8 @@ class SaveDialog(QDialog):
         self.context = self.context = self.logic.context_from_path(
             self.core, self.hipfile
         )
+        # ensure pcore has a project set
+        self.logic.fix_pcore_project(self.core, self.context)
         
         self.identifier = "my_identifier"
         self.latest_version = 1 # internal latest version from prism
